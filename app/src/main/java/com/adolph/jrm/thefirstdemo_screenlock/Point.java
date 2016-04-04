@@ -18,4 +18,9 @@ public class Point {
         this.y = y;
     }
 
+    public float distance(Point a){
+        float distance = (float) Math.sqrt((x - a.x)*(x - a.x) + (y - a.y)*(y - a.y));
+        return distance;
+    }
+
 }

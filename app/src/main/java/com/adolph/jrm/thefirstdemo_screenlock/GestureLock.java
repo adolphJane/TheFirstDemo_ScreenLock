@@ -10,7 +10,11 @@ import android.graphics.Paint;
 import android.graphics.drawable.Drawable;
 import android.text.TextPaint;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.View;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * TODO: document your custom view class.
@@ -19,12 +23,21 @@ public class GestureLock extends View {
 
     private Point[][] points = new Point[3][3];
     private boolean inited = false;
+    private boolean isDraw = false;
     private float bitmapR;
+    private float mouse_x;
+    private float mouse_y;
+    private ArrayList<Point> pointList = new ArrayList<Point>();
+    private ArrayList<Integer> passList = new ArrayList<Integer>();
+
+    private onDrawFinishedListener listener;
 
     private Bitmap bitmapPointError;
     private Bitmap bitmapPointPress;
     private Bitmap bitmapPointNormal;
     private Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private Paint pressPaint = new Paint();
+    private Paint errorPaint = new Paint();
 
     public GestureLock(Context context) {
         super(context);
@@ -38,7 +51,72 @@ public class GestureLock extends View {
         super(context, attrs, defStyle);
     }
 
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        mouse_x = event.getX();
+        mouse_y = event.getY();
+        int[] ij;
+        int i,j;
 
+        switch (event.getAction()){
+            case MotionEvent.ACTION_DOWN:
+                resetPoints();
+                ij = getSelectedPoint();
+                if(ij != null){
+                    isDraw = true;
+                    i = ij[0];
+                    j = ij[1];
+                    points[i][j].state = Point.STATE_PRESS;
+                    pointList.add(points[i][j]);
+                    passList.add(i * 3 + j);
+                }
+                break;
+            case MotionEvent.ACTION_MOVE:
+                if(isDraw){
+                    ij = getSelectedPoint();
+                    if(ij != null){
+                        i = ij[0];
+                        j = ij[1];
+                        if(!pointList.contains(points[i][j])){
+                            points[i][j].state = Point.STATE_PRESS;
+                            pointList.add(points[i][j]);
+                            passList.add(i * 3 + j);
+                        }
+                    }
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+                boolean valid = false;
+                if(listener != null && isDraw){
+                    valid = listener.onDrawFinished(passList);
+                }
+                if(!valid){
+                    for(Point p : pointList){
+                        p.state = Point.STATE_ERROR;
+                    }
+                }
+                isDraw = false;
+                break;
+
+        }
+        this.postInvalidate();
+        return true;
+    }
+
+    private int[] getSelectedPoint(){
+        Point pMouse = new Point(mouse_x,mouse_y);
+        for(int i = 0;i < points.length;i++){
+            for(int j = 0 ;j < points[0].length;j++){
+                if(points[i][j].distance(pMouse) < bitmapR){
+                    int[] result = new int[2];
+                    result[0] = i;
+                    result[1] = j;
+                    return result;
+                }
+            }
+        }
+        return null;
+    }
 
     @Override
     protected void onDraw(Canvas canvas) {
@@ -48,6 +126,26 @@ public class GestureLock extends View {
         }
 
         drawPoints(canvas);
+        if(pointList.size() > 0){
+            Point a = pointList.get(0);
+            for(int i = 1;i < pointList.size();i++){
+                Point b = pointList.get(i);
+                drawLine(canvas,a,b);
+                a = b;
+            }
+            if(isDraw){
+                drawLine(canvas,a,new Point(mouse_x,mouse_y));
+            }
+        }
+    }
+
+    private void drawLine(Canvas canvas,Point a,Point b){
+        if(a.state == Point.STATE_PRESS){
+            canvas.drawLine(a.x,a.y,b.x,b.y,pressPaint);
+        }else if(a.state == Point.STATE_ERROR){
+            canvas.drawLine(a.x,a.y,b.x,b.y,errorPaint);
+        }
+
     }
 
     private void drawPoints(Canvas canvas){
@@ -72,9 +170,14 @@ public class GestureLock extends View {
 
     private void init(){
 
-        bitmapPointError = BitmapFactory.decodeResource(getResources(), R.drawable.error);
-        bitmapPointPress = BitmapFactory.decodeResource(getResources(), R.drawable.press);
-        bitmapPointNormal = BitmapFactory.decodeResource(getResources(), R.drawable.normal);
+        pressPaint.setColor(Color.YELLOW);
+        pressPaint.setStrokeWidth(5);
+        errorPaint.setColor(Color.RED);
+        errorPaint.setStrokeWidth(5);
+
+        bitmapPointError = BitmapFactory.decodeResource(getResources(), R.mipmap.error);
+        bitmapPointPress = BitmapFactory.decodeResource(getResources(), R.mipmap.press);
+        bitmapPointNormal = BitmapFactory.decodeResource(getResources(), R.mipmap.normal);
 
         bitmapR = bitmapPointError.getHeight() / 2;
 
@@ -107,6 +210,25 @@ public class GestureLock extends View {
         points[2][2] = new Point(offset_x + space * 3, offset_y + space * 3);
 
         inited = true;
+    }
+
+    public void resetPoints(){
+        passList.clear();
+        pointList.clear();
+        for(int i = 0;i < points.length;i++){
+            for(int j = 0;j < points[i].length;j++){
+                points[i][j].state = Point.STATE_NORMAL;
+            }
+        }
+        this.postInvalidate();
+    }
+
+    public interface onDrawFinishedListener{
+        boolean onDrawFinished(List<Integer> passList);
+    }
+
+    public void setOnDrawFinishedListener(onDrawFinishedListener listener){
+        this.listener = listener;
     }
 
 }
